@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 )
 
 
@@ -54,12 +56,63 @@ func Shellout(command string) (error, string, string) {
 	return err, stdout.String(), stderr.String()
 }
 
+func ShelloutParentDir(command string) (error, string, string) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 
+	cmd := exec.Command(ShellToUse, "-c", command)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return err, stdout.String(), stderr.String()
+}
+
+func (al *Analyser) FetchLog() {
+	err, currentDir, stderr := ShelloutParentDir("pwd")
+	println(err, currentDir, stderr)
+	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
+	SCPCommand := "sshpass -p \"8416Xuan-greed\" scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
+	SCPCommand += targetFileName
+	SCPCommand += " "
+	SCPCommand += currentDir
+	err, _, stderr = ShelloutParentDir(SCPCommand)
+	if err != nil || stderr != "" {
+		log.Fatal(err)
+	}
+	err, _, stderr = ShelloutParentDir("gunzip " + targetFileName)
+	return
+}
+
+func (al *Analyser) ReadLog() {
+	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	targetFileName := "tapdance-" + yesterdayDate + ".log"
+	file, _ := os.Open(targetFileName)
+	decoder := json.NewDecoder(file)
+	var v map[string]interface{}
+	for true {
+		err := decoder.Decode(&v)
+		if err != nil {
+			return
+		} else {
+			if _, exist := v["system"]; exist {
+				system := v["system"].(map[string]interface{})
+				if _, exist := system["syslog"]; exist {
+					syslog := system["syslog"].(map[string]interface{})
+					if _, exist := syslog["message"]; exist {
+						message := syslog["message"].(string)
+						fmt.Println(message)
+					}
+				}
+			}
+		}
+	}
+}
 
 
 func (al *Analyser) ReadDecoyList() {
-	err, stdout, stderr := Shellout("git pull")
-	err, stdout, stderr = Shellout("ls")
+	err, stdout, _ := Shellout("git pull")
+	err, stdout, _ = Shellout("ls")
 	files := strings.Split(stdout, "\n")
 	sampleName := "-decoys.txt"
 	fileNameOfLatestDecoyList := ""
@@ -70,8 +123,7 @@ func (al *Analyser) ReadDecoyList() {
 		}
 	}
 
-	err, stdout, stderr = Shellout("ls")
-	fmt.Println(err, stdout, stderr)
+	err, stdout, _ = Shellout("ls")
 	_ = os.Chdir("decoy-lists")
 	f, err := os.Open(fileNameOfLatestDecoyList)
 	defer f.Close()
