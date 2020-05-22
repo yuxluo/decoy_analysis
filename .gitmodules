@@ -1,0 +1,3 @@
+[submodule "decoy-lists"]
+	path = decoy-lists
+	url = https://github.com/refraction-networking/decoy-lists

@@ -1,13 +1,17 @@
 package analyser
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"os"
+	"os/exec"
 	"sort"
+	"strings"
 )
 
 
@@ -36,35 +40,59 @@ func InitAnalyser() *Analyser{
 	return al
 }
 
+const ShellToUse = "bash"
+
+func Shellout(command string) (error, string, string) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cmd := exec.Command(ShellToUse, "-c", command)
+	cmd.Dir = "decoy-lists"
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return err, stdout.String(), stderr.String()
+}
+
+
+
+
 func (al *Analyser) ReadDecoyList() {
-	f, err := os.Open("decoys.csv")
+	err, stdout, stderr := Shellout("git pull")
+	err, stdout, stderr = Shellout("ls")
+	files := strings.Split(stdout, "\n")
+	sampleName := "-decoys.txt"
+	fileNameOfLatestDecoyList := ""
+
+	for _, item := range files {
+		if CheckEnd(item, sampleName) {
+			fileNameOfLatestDecoyList = item
+		}
+	}
+
+	err, stdout, stderr = Shellout("ls")
+	fmt.Println(err, stdout, stderr)
+	_ = os.Chdir("decoy-lists")
+	f, err := os.Open(fileNameOfLatestDecoyList)
 	defer f.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	csvr := csv.NewReader(f)
-	if err != nil {
-		log.Fatal(err)
-	}
+	scanner := bufio.NewScanner(f)
+	scanner.Scan()
 
 	for {
-		row, err := csvr.Read()
-		if err != nil {
-			if err == io.EOF {
-				return
-			} else {
-				log.Fatal(err)
-			}
+		scanner.Scan()
+		row := strings.Split(scanner.Text(), string(','))
+		if scanner.Text() == "" {
+			break
+		} else {
+			ip := row[0]
+			hostname := row[1]
+			al.ipToHostname[ip] = hostname
 		}
-		if len(row) == 0 {
-			continue
-		}
-
-		ip := row[0]
-		hostname := row[1]
-		al.ipToHostname[ip] = hostname
 	}
+	_ = os.Chdir("..")
 }
 
 func (al *Analyser) ReadNetFlow() {
@@ -195,7 +223,11 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 	}
 
 	sort.Slice(sortingSlice, func(i, j int) bool {
-		return sortingSlice[i].DecoyFailureRate < sortingSlice[j].DecoyFailureRate
+		if sortingSlice[i].DecoyFailureRate == sortingSlice[j].DecoyFailureRate {
+			return sortingSlice[i].SampleSize >  sortingSlice[j].SampleSize
+		} else {
+			return sortingSlice[i].DecoyFailureRate < sortingSlice[j].DecoyFailureRate
+		}
 	})
 
 	fmt.Printf("\nThe top %v decoys with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, sampleSizeThreshold)
@@ -259,7 +291,11 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 	}
 
 	sort.Slice(sortingSlice, func(i, j int) bool {
-		return sortingSlice[i].DecoyFailureRate < sortingSlice[j].DecoyFailureRate
+		if sortingSlice[i].DecoyFailureRate == sortingSlice[j].DecoyFailureRate {
+			return sortingSlice[i].SampleSize >  sortingSlice[j].SampleSize
+		} else {
+			return sortingSlice[i].DecoyFailureRate < sortingSlice[j].DecoyFailureRate
+		}
 	})
 
 	fmt.Printf("\nThe top %v decoys for %v with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, country, sampleSizeThreshold)

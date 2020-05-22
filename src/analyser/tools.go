@@ -18,3 +18,15 @@ func GetAsByIp(ip string) {
 	fmt.Printf("%v", resp.Name.Raw)
 }
 
+func CheckEnd(candidate, standard string) bool {
+	if len(candidate) < len(standard) {
+		return false
+	} else {
+		for i := 0; i < len(standard); i++ {
+			if standard[len(standard) - 1 -i] != candidate[len(candidate) - 1 - i] {
+				return false
+			}
+		}
+		return true
+	}
+}

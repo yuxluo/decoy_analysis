@@ -12,5 +12,5 @@ func main() {
 	al.ComputeFailureRateForCountry()
 	al.ComputeFailureRateForDecoy()
 	al.PrintDecoyReports(10, 10)
-	al.PrintDecoyReportFor("Iran", 10, 10)
+	al.PrintDecoyReportFor("Turkmenistan", 10, 10)
 }
