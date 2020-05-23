@@ -108,7 +108,7 @@ func (al *Analyser) ReadLog() {
 			v := new(map[string]interface{})
 			err := decoder.Decode(v)
 			if err != nil {
-				return
+				break
 			} else {
 				go al.ProcessMessage(v)
 			}
@@ -171,7 +171,6 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 				message := syslog["message"].(string)
 				connection := ProcessMessage(message)
 				if connection.connectionType != "" {
-					fmt.Printf("%v %v %v\n", connection.connectionType, connection.clientIP, connection.decoyIP)
 					al.decoyChannel <- connection
 					al.countryChannel <- connection
 				}
