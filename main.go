@@ -6,8 +6,8 @@ import (
 
 func main() {
 	al := analyser.InitAnalyser()
-	//al.ReadDecoyList()
-	//al.FetchLog()
+	al.ReadDecoyList()
+	al.FetchLog()
 	al.ReadLog()
 	terminationChannel1 := make(chan bool)
 	terminationChannel2 := make(chan bool)
@@ -19,8 +19,8 @@ func main() {
 	for _ = range terminationChannel2 {
 		continue
 	}
-	al.ComputeFailureRateForCountry()
-	al.ComputeFailureRateForDecoy()
+	go al.ComputeFailureRateForCountry()
+	go al.ComputeFailureRateForDecoy()
 	al.PrintDecoyReports(10, 10)
 	al.PrintDecoyReportFor("IR", 10, 10)
 }

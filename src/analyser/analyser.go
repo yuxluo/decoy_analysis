@@ -80,17 +80,18 @@ func ShelloutParentDir(command string) (error, string, string) {
 
 func (al *Analyser) FetchLog() {
 	err, currentDir, stderr := ShelloutParentDir("pwd")
-	println(err, currentDir, stderr)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
 	SCPCommand := "sshpass -p \"8416Xuan-greed\" scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
 	SCPCommand += targetFileName
 	SCPCommand += " "
 	SCPCommand += currentDir
+	fmt.Printf("Retrieving %v from Greed ...\n", targetFileName)
 	err, _, stderr = ShelloutParentDir(SCPCommand)
 	if err != nil || stderr != "" {
 		log.Fatal(err)
 	}
+	fmt.Printf("Decompressing %v ...\n", targetFileName)
 	err, _, stderr = ShelloutParentDir("gunzip " + targetFileName)
 	return
 }
@@ -98,6 +99,8 @@ func (al *Analyser) FetchLog() {
 func (al *Analyser) ReadLog() {
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log"
+	fmt.Printf("Parsing %v ...\n", targetFileName)
+
 	file, _ := os.Open(targetFileName)
 	decoder := json.NewDecoder(file)
 	go func() {
@@ -110,9 +113,13 @@ func (al *Analyser) ReadLog() {
 				go al.ProcessMessage(v)
 			}
 		}
+
+		fmt.Printf("Finished parsing %v, closing channels ...\n", targetFileName)
 		time.Sleep(10 * time.Second)
 		close(al.countryChannel)
 		close(al.decoyChannel)
+		fmt.Printf("Removing %v ...\n", targetFileName)
+		_, _, _ = ShelloutParentDir("rm -rf " + targetFileName)
 	} ()
 
 }
@@ -174,7 +181,8 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 }
 
 func (al *Analyser) ReadDecoyList() {
-	err, stdout, _ := Shellout("git pull")
+	println("Pulling decoy-lists from github ...")
+	err, stdout, _ := ShelloutParentDir("git clone git@github.com:refraction-networking/decoy-lists.git")
 	err, stdout, _ = Shellout("ls")
 	files := strings.Split(stdout, "\n")
 	sampleName := "-decoys.txt"
@@ -186,6 +194,7 @@ func (al *Analyser) ReadDecoyList() {
 		}
 	}
 
+	fmt.Printf("Reading %v ...\n", fileNameOfLatestDecoyList)
 	err, stdout, _ = Shellout("ls")
 	_ = os.Chdir("decoy-lists")
 	f, err := os.Open(fileNameOfLatestDecoyList)
@@ -208,9 +217,13 @@ func (al *Analyser) ReadDecoyList() {
 		}
 	}
 	_ = os.Chdir("..")
+	println("Cleaning up decoy-lists ...")
+	err, stdout, _ = ShelloutParentDir("rm -rf decoy-lists")
 }
 
 func (al *Analyser)ComputeFailureRateForCountry() {
+	println("Computing failure rate for each country ...")
+
 	for _, statsForEachCountry := range al.countryStats {
 		for _,statsForEachDecoy := range statsForEachCountry.decoyStatsForThisCountry {
 			statsForEachDecoy.failureRate = float64(statsForEachDecoy.numFailures) / (float64(statsForEachDecoy.numFailures) + float64(statsForEachDecoy.numSuccesses))
@@ -219,6 +232,8 @@ func (al *Analyser)ComputeFailureRateForCountry() {
 }
 
 func (al *Analyser) ComputeFailureRateForDecoy() {
+	println("Computing failure rate for each decoy ...")
+
 	for _, statsForEachDecoy := range al.decoyStats {
 		statsForEachDecoy.failureRate = float64(statsForEachDecoy.numFailures) / (float64(statsForEachDecoy.numFailures) + float64(statsForEachDecoy.numSuccesses))
 	}
