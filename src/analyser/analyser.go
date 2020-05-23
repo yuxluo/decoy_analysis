@@ -110,13 +110,14 @@ func (al *Analyser) ReadLog() {
 				go al.ProcessMessage(v)
 			}
 		}
+		time.Sleep(10 * time.Second)
+		close(al.countryChannel)
+		close(al.decoyChannel)
 	} ()
-
-
 
 }
 
-func (al * Analyser) ProcessDecoyChannel() {
+func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
 	for connection := range al.countryChannel {
 
 		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
@@ -128,11 +129,12 @@ func (al * Analyser) ProcessDecoyChannel() {
 			al.decoyStats[connection.decoyIP].numFailures++
 		}
 
-
 	}
+	fmt.Println("Decoy Channel closed")
+	close(terminationChannel1)
 }
 
-func (al *Analyser) ProcessCountryChannel() {
+func (al *Analyser) ProcessCountryChannel(terminationChannel2 chan bool) {
 	for connection := range al.countryChannel {
 		if _, exist := al.countryStats[connection.clientCountry]; !exist {
 			al.countryStats[connection.clientCountry] = new(AggregatedCountryStats)
@@ -149,6 +151,8 @@ func (al *Analyser) ProcessCountryChannel() {
 			al.countryStats[connection.clientCountry].decoyStatsForThisCountry[connection.decoyIP].numFailures++
 		}
 	}
+	fmt.Println("Country Channel closed")
+	close(terminationChannel2)
 }
 
 func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
@@ -160,6 +164,7 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 				message := syslog["message"].(string)
 				connection := ProcessMessage(message)
 				if connection.connectionType != "" {
+					fmt.Printf("%v %v %v\n", connection.connectionType, connection.clientIP, connection.decoyIP)
 					al.decoyChannel <- connection
 					al.countryChannel <- connection
 				}

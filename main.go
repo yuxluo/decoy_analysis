@@ -9,10 +9,18 @@ func main() {
 	//al.ReadDecoyList()
 	//al.FetchLog()
 	al.ReadLog()
-	al.ReadNetFlow()
-	al.ReadFailedDecoy()
-	//al.ComputeFailureRateForCountry()
-	//al.ComputeFailureRateForDecoy()
-	//al.PrintDecoyReports(10, 10)
-	//al.PrintDecoyReportFor("Turkmenistan", 10, 10)
+	terminationChannel1 := make(chan bool)
+	terminationChannel2 := make(chan bool)
+	go al.ProcessCountryChannel(terminationChannel2)
+	go al.ProcessDecoyChannel(terminationChannel1)
+	for _ = range terminationChannel1 {
+		continue
+	}
+	for _ = range terminationChannel2 {
+		continue
+	}
+	al.ComputeFailureRateForCountry()
+	al.ComputeFailureRateForDecoy()
+	al.PrintDecoyReports(10, 10)
+	al.PrintDecoyReportFor("IR", 10, 10)
 }
