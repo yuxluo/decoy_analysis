@@ -220,7 +220,7 @@ func (al *Analyser) ReadDecoyList() {
 	err, stdout, _ = ShelloutParentDir("rm -rf decoy-lists")
 }
 
-func (al *Analyser)ComputeFailureRateForCountry() {
+func (al *Analyser)ComputeFailureRateForCountry(terminationChannel chan bool) {
 	println("Computing failure rate for each country ...")
 
 	for _, statsForEachCountry := range al.countryStats {
@@ -228,14 +228,18 @@ func (al *Analyser)ComputeFailureRateForCountry() {
 			statsForEachDecoy.failureRate = float64(statsForEachDecoy.numFailures) / (float64(statsForEachDecoy.numFailures) + float64(statsForEachDecoy.numSuccesses))
 		}
 	}
+	println("Finished computing failure rate for each country ...")
+	close(terminationChannel)
 }
 
-func (al *Analyser) ComputeFailureRateForDecoy() {
+func (al *Analyser) ComputeFailureRateForDecoy(terminationChannel chan bool) {
 	println("Computing failure rate for each decoy ...")
 
 	for _, statsForEachDecoy := range al.decoyStats {
 		statsForEachDecoy.failureRate = float64(statsForEachDecoy.numFailures) / (float64(statsForEachDecoy.numFailures) + float64(statsForEachDecoy.numSuccesses))
 	}
+	println("Finished computing failure rate for each decoy ...")
+	close(terminationChannel)
 }
 
 func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold int) {
