@@ -3,10 +3,8 @@ package analyser
 import (
 	"bufio"
 	"bytes"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"os"
@@ -15,6 +13,7 @@ import (
 	"strings"
 	"time"
 )
+
 
 
 type StatsForSpecificDecoy struct {
@@ -27,11 +26,21 @@ type AggregatedCountryStats struct {
 	decoyStatsForThisCountry map[string]*StatsForSpecificDecoy // decoy ip -> stats
 }
 
+type Connection struct {
+	connectionType string
+	clientIP string
+	decoyIP string
+	clientCountry string
+}
+
 type Analyser struct {
 	countryStats map[string]*AggregatedCountryStats // Country name -> stats
 	decoyStats map[string]*StatsForSpecificDecoy // Decoy ip -> stats
 	ipToHostname map[string]string
+	countryChannel chan Connection
+	decoyChannel chan Connection
 }
+
 
 
 func InitAnalyser() *Analyser{
@@ -39,6 +48,8 @@ func InitAnalyser() *Analyser{
 	al.countryStats = make(map[string]*AggregatedCountryStats)
 	al.decoyStats = make(map[string]*StatsForSpecificDecoy)
 	al.ipToHostname = make(map[string]string)
+	al.countryChannel = make(chan Connection, 64)
+	al.decoyChannel = make(chan Connection, 64)
 	return al
 }
 
@@ -89,26 +100,73 @@ func (al *Analyser) ReadLog() {
 	targetFileName := "tapdance-" + yesterdayDate + ".log"
 	file, _ := os.Open(targetFileName)
 	decoder := json.NewDecoder(file)
-	var v map[string]interface{}
-	for true {
-		err := decoder.Decode(&v)
-		if err != nil {
-			return
+	go func() {
+		for true {
+			v := new(map[string]interface{})
+			err := decoder.Decode(v)
+			if err != nil {
+				return
+			} else {
+				go al.ProcessMessage(v)
+			}
+		}
+	} ()
+
+
+
+}
+
+func (al * Analyser) ProcessDecoyChannel() {
+	for connection := range al.countryChannel {
+
+		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
+			al.decoyStats[connection.decoyIP] = new(StatsForSpecificDecoy)
+		}
+		if connection.connectionType == "newflow" {
+			al.decoyStats[connection.decoyIP].numSuccesses++
 		} else {
-			if _, exist := v["system"]; exist {
-				system := v["system"].(map[string]interface{})
-				if _, exist := system["syslog"]; exist {
-					syslog := system["syslog"].(map[string]interface{})
-					if _, exist := syslog["message"]; exist {
-						message := syslog["message"].(string)
-						fmt.Println(message)
-					}
+			al.decoyStats[connection.decoyIP].numFailures++
+		}
+
+
+	}
+}
+
+func (al *Analyser) ProcessCountryChannel() {
+	for connection := range al.countryChannel {
+		if _, exist := al.countryStats[connection.clientCountry]; !exist {
+			al.countryStats[connection.clientCountry] = new(AggregatedCountryStats)
+			al.countryStats[connection.clientCountry].decoyStatsForThisCountry = make(map[string]*StatsForSpecificDecoy)
+		}
+
+		if _, exist := al.countryStats[connection.clientCountry].decoyStatsForThisCountry[connection.decoyIP]; !exist {
+			al.countryStats[connection.clientCountry].decoyStatsForThisCountry[connection.decoyIP] = new(StatsForSpecificDecoy)
+		}
+
+		if connection.connectionType == "newflow" {
+			al.countryStats[connection.clientCountry].decoyStatsForThisCountry[connection.decoyIP].numSuccesses++
+		} else {
+			al.countryStats[connection.clientCountry].decoyStatsForThisCountry[connection.decoyIP].numFailures++
+		}
+	}
+}
+
+func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
+	if _, exist := (*v)["system"]; exist {
+		system := (*v)["system"].(map[string]interface{})
+		if _, exist := system["syslog"]; exist {
+			syslog := system["syslog"].(map[string]interface{})
+			if _, exist := syslog["message"]; exist {
+				message := syslog["message"].(string)
+				connection := ProcessMessage(message)
+				if connection.connectionType != "" {
+					al.decoyChannel <- connection
+					al.countryChannel <- connection
 				}
 			}
 		}
 	}
 }
-
 
 func (al *Analyser) ReadDecoyList() {
 	err, stdout, _ := Shellout("git pull")
@@ -145,99 +203,6 @@ func (al *Analyser) ReadDecoyList() {
 		}
 	}
 	_ = os.Chdir("..")
-}
-
-func (al *Analyser) ReadNetFlow() {
-	f, err := os.Open("netflow.csv")
-	defer f.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	csvr := csv.NewReader(f)
-	_, err = csvr.Read()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		row, err := csvr.Read()
-		if err != nil {
-			if err == io.EOF {
-				return
-			} else {
-				log.Fatal(err)
-			}
-		}
-		if len(row) == 0 {
-			continue
-		}
-		detectorAddr := row[57]
-		clientCountry := row[44]
-
-		//country stuff
-		if _, exist := al.countryStats[clientCountry]; !exist {
-			al.countryStats[clientCountry] = new(AggregatedCountryStats)
-			al.countryStats[clientCountry].decoyStatsForThisCountry = make(map[string]*StatsForSpecificDecoy)
-		}
-		if _, exist := al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr]; !exist {
-			al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr] = new(StatsForSpecificDecoy)
-		}
-		al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr].numSuccesses++
-
-		//decoy stuff
-		if _, exist := al.decoyStats[detectorAddr]; !exist {
-			al.decoyStats[detectorAddr] = new(StatsForSpecificDecoy)
-		}
-		al.decoyStats[detectorAddr].numSuccesses++
-	}
-}
-
-
-func (al *Analyser) ReadFailedDecoy() {
-	f, err := os.Open("faileddecoy.csv")
-	defer f.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	csvr := csv.NewReader(f)
-	_, err = csvr.Read()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		row, err := csvr.Read()
-		if err != nil {
-			if err == io.EOF {
-				return
-			} else {
-				log.Fatal(err)
-			}
-		}
-		if len(row) == 0 {
-			continue
-		}
-		detectorAddr := row[58]
-		clientCountry := row[44]
-
-		//country stuff
-		if _, exist := al.countryStats[clientCountry]; !exist {
-			al.countryStats[clientCountry] = new(AggregatedCountryStats)
-			al.countryStats[clientCountry].decoyStatsForThisCountry = make(map[string]*StatsForSpecificDecoy)
-		}
-		if _, exist := al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr]; !exist {
-			al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr] = new(StatsForSpecificDecoy)
-		}
-		al.countryStats[clientCountry].decoyStatsForThisCountry[detectorAddr].numFailures++
-
-		//decoy stuff
-		if _, exist := al.decoyStats[detectorAddr]; !exist {
-			al.decoyStats[detectorAddr] = new(StatsForSpecificDecoy)
-		}
-		al.decoyStats[detectorAddr].numFailures++
-	}
 }
 
 func (al *Analyser)ComputeFailureRateForCountry() {
@@ -386,3 +351,25 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 }
 
 
+func ProcessMessage(message string) (Connection) {
+	splitMessage := strings.Split(message, " ")
+	var connection Connection
+
+	if len(splitMessage) > (7 + 3) {
+		if splitMessage[7] == "newflow" {
+			connection.connectionType = "newflow"
+			connection.clientIP = strings.Split(splitMessage[7 + 1], ":")[0]
+			connection.decoyIP = strings.Split(splitMessage[7 + 3], ":")[0]
+		} else if splitMessage[7] == "faileddecoy" {
+			connection.connectionType = "faileddecoy"
+			connection.clientIP = strings.Split(splitMessage[7 + 1], ":")[0]
+			connection.decoyIP = strings.Split(splitMessage[7 + 3], ":")[0]
+		}
+	}
+
+	if connection.clientIP != "" {
+		connection.clientCountry = GetCountryByIp(connection.clientIP)
+	}
+
+	return connection
+}

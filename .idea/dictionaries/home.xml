@@ -2,6 +2,8 @@
   <dictionary name="home">
     <words>
       <w>catlog</w>
+      <w>faileddecoy</w>
+      <w>newflow</w>
     </words>
   </dictionary>
 </component>

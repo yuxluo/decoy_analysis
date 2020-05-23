@@ -1,13 +1,12 @@
 package analyser
 
 import (
-	"fmt"
 	"github.com/ammario/ipisp"
 	"log"
 	"net"
 )
 
-func GetAsByIp(ip string) {
+func GetCountryByIp(ip string) string{
 	client, err := ipisp.NewDNSClient()
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
@@ -15,7 +14,11 @@ func GetAsByIp(ip string) {
 	defer client.Close()
 
 	resp, err := client.LookupIP(net.ParseIP(ip))
-	fmt.Printf("%v", resp.Name.Raw)
+	if err == nil {
+		return resp.Country
+	} else {
+		return "Unknown"
+	}
 }
 
 func CheckEnd(candidate, standard string) bool {
@@ -30,3 +33,5 @@ func CheckEnd(candidate, standard string) bool {
 		return true
 	}
 }
+
+
