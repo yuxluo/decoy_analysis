@@ -125,8 +125,7 @@ func (al *Analyser) ReadLog() {
 }
 
 func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
-	for connection := range al.countryChannel {
-
+	for connection := range al.decoyChannel {
 		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
 			al.decoyStats[connection.decoyIP] = new(StatsForSpecificDecoy)
 		}
@@ -283,7 +282,7 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 			for len(sortingSlice[i].DecoyIP) < 15 {
 				sortingSlice[i].DecoyIP += " "
 			}
-			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, math.Floor(sortingSlice[i].DecoyFailureRate*100)/100, sortingSlice[i].SampleSize, domain)
+			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
 	}
 
@@ -300,7 +299,7 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 			for len(sortingSlice[i].DecoyIP) < 15 {
 				sortingSlice[i].DecoyIP += " "
 			}
-			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, math.Floor(sortingSlice[i].DecoyFailureRate*100)/100, sortingSlice[i].SampleSize, domain)
+			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
 	}
 
@@ -395,4 +394,8 @@ func ProcessMessage(message string) (Connection) {
 	}
 
 	return connection
+}
+
+func (al *Analyser) PrintInfo() {
+	fmt.Printf("%v %v", len(al.decoyStats), len(al.countryStats))
 }

@@ -25,6 +25,6 @@ func main() {
 	for _ = range terminationChannel3 {}
 	for _ = range terminationChannel4 {}
 
-	al.PrintDecoyReports(10, 10)
-	al.PrintDecoyReportFor("IR", 10, 10)
+	al.PrintDecoyReports(10, 100)
+	al.PrintDecoyReportFor("CN", 10, 100)
 }
