@@ -82,7 +82,7 @@ func (al *Analyser) FetchLog() {
 	err, currentDir, stderr := ShelloutParentDir("pwd")
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
-	SCPCommand := "sshpass -p \"8416Xuan-greed\" scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
+	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
 	SCPCommand += targetFileName
 	SCPCommand += " "
 	SCPCommand += currentDir
@@ -126,6 +126,7 @@ func (al *Analyser) ReadLog() {
 
 func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
 	for connection := range al.decoyChannel {
+
 		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
 			al.decoyStats[connection.decoyIP] = new(StatsForSpecificDecoy)
 		}
