@@ -5,8 +5,8 @@ import (
 )
 
 func main() {
-
-	al := analyser.InitAnalyser()
+	var al *analyser.Analyser
+	al = analyser.InitAnalyser()
 	al.ReadDecoyList()
 	al.FetchLog()
 	al.ReadLog()
@@ -26,5 +26,5 @@ func main() {
 	for _ = range terminationChannel4 {}
 
 	al.PrintDecoyReports(10, 100)
-	al.PrintDecoyReportFor("CN", 10, 100)
+	al.PrintDecoyReportFor("IR", 10, 100)
 }

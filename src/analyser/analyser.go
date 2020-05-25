@@ -351,7 +351,7 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 			for len(sortingSlice[i].DecoyIP) < 15 {
 				sortingSlice[i].DecoyIP += " "
 			}
-			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, math.Floor(sortingSlice[i].DecoyFailureRate*100)/100, sortingSlice[i].SampleSize, domain)
+			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
 	}
 
