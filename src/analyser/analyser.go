@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +24,7 @@ type StatsForSpecificDecoy struct {
 
 type AggregatedCountryStats struct {
 	decoyStatsForThisCountry map[string]*StatsForSpecificDecoy // decoy ip -> stats
+	averageFailureRate float64
 }
 
 type Connection struct {
@@ -39,6 +40,7 @@ type Analyser struct {
 	ipToHostname map[string]string
 	countryChannel chan Connection
 	decoyChannel chan Connection
+	completeDecoyList []string
 }
 
 
@@ -206,6 +208,7 @@ func (al *Analyser) ReadDecoyList() {
 
 	for {
 		scanner.Scan()
+		al.completeDecoyList = append(al.completeDecoyList, scanner.Text())
 		row := strings.Split(scanner.Text(), string(','))
 		if scanner.Text() == "" {
 			break
@@ -249,7 +252,7 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 		cumulativeFailures += statsForEachDecoy.numFailures
 		cumulativeSuccesses += statsForEachDecoy.numSuccesses
 	}
-	fmt.Printf("\n\nThe average failure rate of all decoys in the past hour is %v \n", float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses) )
+	fmt.Printf("\n\nThe average failure rate of all decoys in the past day is %v \n", float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses) )
 
 	type kv struct {
 		DecoyIP string
@@ -270,7 +273,7 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 		}
 	})
 
-	fmt.Printf("\nThe top %v decoys with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, sampleSizeThreshold)
+	fmt.Printf("\nThe top %v decoys with at least %v connections in the past day are:\n\n", numberOfDecoysToList, sampleSizeThreshold)
 	fmt.Printf("\t %v \t %v \t %v \t %v \n", "Detector IP", "Failure Rate", "Sample Size", "Hostname")
 	var count int
 	for i := 0; i < len(sortingSlice) && count < numberOfDecoysToList; i++ {
@@ -287,7 +290,7 @@ func (al *Analyser) PrintDecoyReports(numberOfDecoysToList, sampleSizeThreshold 
 		}
 	}
 
-	fmt.Printf("\n\nThe bottom %v decoys with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, sampleSizeThreshold)
+	fmt.Printf("\n\nThe bottom %v decoys with at least %v connections in the past day are:\n\n", numberOfDecoysToList, sampleSizeThreshold)
 	fmt.Printf("\t %v \t %v \t %v \t %v \n", "Detector IP", "Failure Rate", "Sample Size", "Hostname")
 	count = 0
 	for i := len(sortingSlice) - 1; i >= 0 && count < numberOfDecoysToList; i-- {
@@ -317,7 +320,7 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 		cumulativeFailures += statsForEachDecoy.numFailures
 		cumulativeSuccesses += statsForEachDecoy.numSuccesses
 	}
-	fmt.Printf("\n\nThe average failure rate for %v in the past hour is %v \n", country, float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses) )
+	fmt.Printf("\n\nThe average failure rate for %v in the past day is %v \n", country, float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses) )
 
 	type kv struct {
 		DecoyIP string
@@ -338,7 +341,7 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 		}
 	})
 
-	fmt.Printf("\nThe top %v decoys for %v with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, country, sampleSizeThreshold)
+	fmt.Printf("\nThe top %v decoys for %v with at least %v connections in the past day are:\n\n", numberOfDecoysToList, country, sampleSizeThreshold)
 	fmt.Printf("\t %v \t %v \t %v \t %v \n", "Detector IP", "Failure Rate", "Sample Size", "Hostname")
 	var count int
 	for i := 0; i < len(sortingSlice) && count < numberOfDecoysToList; i++ {
@@ -355,7 +358,7 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 		}
 	}
 
-	fmt.Printf("\n\nThe bottom %v decoys for %v with at least %v connections in the past hour are:\n\n", numberOfDecoysToList, country, sampleSizeThreshold)
+	fmt.Printf("\n\nThe bottom %v decoys for %v with at least %v connections in the past day are:\n\n", numberOfDecoysToList, country, sampleSizeThreshold)
 	fmt.Printf("\t %v \t %v \t %v \t %v \n", "Detector IP", "Failure Rate", "Sample Size", "Hostname")
 	count = 0
 	for i := len(sortingSlice) - 1; i >= 0 && count < numberOfDecoysToList; i-- {
@@ -368,7 +371,7 @@ func (al *Analyser) PrintDecoyReportFor(country string, numberOfDecoysToList, sa
 			for len(sortingSlice[i].DecoyIP) < 15 {
 				sortingSlice[i].DecoyIP += " "
 			}
-			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, math.Floor(sortingSlice[i].DecoyFailureRate*100)/100, sortingSlice[i].SampleSize, domain)
+			fmt.Printf("\t %v \t %v \t %v \t\t %v \n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
 	}
 }
@@ -397,6 +400,198 @@ func ProcessMessage(message string) (Connection) {
 	return connection
 }
 
-func (al *Analyser) PrintInfo() {
-	fmt.Printf("%v %v", len(al.decoyStats), len(al.countryStats))
+type CoolDown struct {
+	daysRemaining int
+	NextBenchDays int
 }
+
+func (al *Analyser) CalculateAverageFailureRateForEachCountry() {
+	for countryName, countryInfo  := range al.countryStats {
+		var cumulativeSuccesses int
+		var cumulativeFailures int
+		for _, statsForEachDecoy := range countryInfo.decoyStatsForThisCountry {
+			cumulativeFailures += statsForEachDecoy.numFailures
+			cumulativeSuccesses += statsForEachDecoy.numSuccesses
+		}
+		countryInfo.averageFailureRate = float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses)
+		fmt.Printf("The average failure rate for %v in the past day is %v \n", countryName, countryInfo.averageFailureRate)
+	}
+
+}
+
+func (al *Analyser) UpdateActiveDecoyList() {
+
+	/*
+	Benching Criteria:
+		Failure Rate > daily average for each country + 0.05
+	 */
+
+	const amnesty = 0.05
+
+	for countryCode, countryInfo := range al.countryStats {
+		coolDownStats := make(map[string]CoolDown)
+		benchedFile, err := os.Open("./list/" + countryCode + "_Benched.csv")
+		if err == nil { // There exist benched decoys for this country
+			scanner := bufio.NewScanner(benchedFile)
+			for scanner.Scan() {
+				line := strings.Split(scanner.Text(), ",")
+				IP := line[0]
+				daysRemaining, _ := strconv.Atoi(line[1])
+				NextBenchDays, _ := strconv.Atoi(line[2])
+				coolDownStats[IP] = CoolDown{daysRemaining: daysRemaining, NextBenchDays: NextBenchDays}
+			}
+
+			for key, value := range coolDownStats {
+				if value.daysRemaining == 0 {
+					value.NextBenchDays--
+					if value.NextBenchDays <= 0 {
+						delete(coolDownStats, key)
+					}
+				} else {
+					value.daysRemaining--
+				}
+			}
+			benchedFile.Close()
+		}
+
+
+
+		// bench bad decoys
+		for decoyIP, DecoyInfo := range countryInfo.decoyStatsForThisCountry {
+			if DecoyInfo.failureRate > countryInfo.averageFailureRate + amnesty {
+				if value, exist := coolDownStats[decoyIP]; exist {
+					value.daysRemaining = value.NextBenchDays
+					value.NextBenchDays *= 2
+				} else {
+					coolDownStats[decoyIP] = CoolDown{
+						daysRemaining: 1,
+						NextBenchDays: 2,
+					}
+				}
+			}
+		}
+
+		//write benching info to file
+		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Benched.csv")
+		if len(coolDownStats) != 0 {
+			benchedFile, _ = os.Create("./list/" + countryCode + "_Benched.csv")
+			benchWriter := bufio.NewWriter(benchedFile)
+			for decoyIP, coolDownInfo := range coolDownStats {
+				_, _ = fmt.Fprintf(benchWriter, "%v,%v,%v\n", decoyIP, coolDownInfo.daysRemaining, coolDownInfo.NextBenchDays)
+			}
+			_ = benchWriter.Flush()
+			benchedFile.Close()
+		}
+
+		//write active decoys to file
+		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Active.txt")
+		activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
+		activeWriter := bufio.NewWriter(activeFile)
+		for _, item := range al.completeDecoyList {
+			if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist {
+				_, _ = fmt.Fprintf(activeWriter, item + "\n")
+			}
+		}
+		_ = activeWriter.Flush()
+		activeFile.Close()
+		fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
+	}
+}
+
+
+
+func (al *Analyser) WriteDecoyReportFor(filename, country string, numberOfDecoysToList, sampleSizeThreshold int) {
+	if _, exist := al.countryStats[country]; !exist {
+		return
+	}
+
+	var cumulativeSuccesses int
+	var cumulativeFailures int
+	for _, statsForEachDecoy := range al.countryStats[country].decoyStatsForThisCountry {
+		cumulativeFailures += statsForEachDecoy.numFailures
+		cumulativeSuccesses += statsForEachDecoy.numSuccesses
+	}
+	averageFailureRate := float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses)
+	f, _ := os.Create(filename + ".txt")
+	w := bufio.NewWriter(f)
+	type kv struct {
+		DecoyIP string
+		DecoyFailureRate float64
+		SampleSize int
+	}
+
+	var sortingSlice []kv
+	for key,value := range al.countryStats[country].decoyStatsForThisCountry {
+		sortingSlice = append(sortingSlice, kv{key, value.failureRate, value.numSuccesses + value.numFailures})
+	}
+
+
+
+	sort.Slice(sortingSlice, func(i, j int) bool {
+		if sortingSlice[i].DecoyFailureRate == sortingSlice[j].DecoyFailureRate {
+			return sortingSlice[i].SampleSize >  sortingSlice[j].SampleSize
+		} else {
+			return sortingSlice[i].DecoyFailureRate < sortingSlice[j].DecoyFailureRate
+		}
+	})
+
+	numberOfUnknownDomain := len(sortingSlice)
+	for i := 0; i < len(sortingSlice); i++ {
+		domain := "Unknown"
+		if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; found {
+			domain = al.ipToHostname[sortingSlice[i].DecoyIP]
+			numberOfUnknownDomain--
+		}
+		_, _ = fmt.Fprintf(w, "%v %v %v %v\n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
+	}
+	_ = w.Flush()
+
+
+	sort.Slice(sortingSlice, func(i, j int) bool {
+		return sortingSlice[i].SampleSize > sortingSlice[j].SampleSize
+	})
+
+	unknownInTop100Count := 0
+	goodDecoyCount := 0
+	for i:= 0; goodDecoyCount < 100; i++ {
+		if sortingSlice[i].DecoyFailureRate < averageFailureRate {
+			goodDecoyCount++
+		}
+		if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; !found {
+			unknownInTop100Count++
+		}
+	}
+
+	fmt.Printf("%v, #unique decoys: %v, percentage of decoys not in latest decoylist: %v, percentage of good decoy in top 100 decoys by popularity not in latest decoylist: %v\n", filename, len(sortingSlice), float64(numberOfUnknownDomain) / float64(len(sortingSlice)), float64(unknownInTop100Count)/float64(100))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

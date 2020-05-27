@@ -1,10 +1,9 @@
 package main
 
-import (
-	"analyser"
-)
+import "analyser"
 
 func main() {
+
 	var al *analyser.Analyser
 	al = analyser.InitAnalyser()
 	al.ReadDecoyList()
@@ -25,6 +24,7 @@ func main() {
 	for _ = range terminationChannel3 {}
 	for _ = range terminationChannel4 {}
 
-	al.PrintDecoyReports(10, 100)
-	al.PrintDecoyReportFor("IR", 10, 100)
+	al.CalculateAverageFailureRateForEachCountry()
+	al.UpdateActiveDecoyList()
+	al.WriteDecoyReportFor("IRStats","IR", 100, 1)
 }
