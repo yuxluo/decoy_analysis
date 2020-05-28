@@ -1,9 +1,53 @@
 package main
 
-import "analyser"
+import (
+	"analyser"
+	"fmt"
+	"time"
+)
+const IntervalPeriod time.Duration = 24 * time.Hour
+
+const HourToTick int = 00
+const MinuteToTick int = 05
+const SecondToTick int = 00
+
+type jobTicker struct {
+	timer *time.Timer
+}
+
+func runningRoutine() {
+	jobTicker := &jobTicker{}
+	jobTicker.updateTimer()
+	for {
+		<-jobTicker.timer.C
+		fmt.Println(time.Now(), "- just ticked")
+		jobTicker.updateTimer()
+	}
+}
+
+func (t *jobTicker) updateTimer() {
+	nextTick := time.Date(time.Now().Year(), time.Now().Month(),
+		time.Now().Day(), HourToTick, MinuteToTick, SecondToTick, 0, time.Local)
+	if !nextTick.After(time.Now()) {
+		nextTick = nextTick.Add(IntervalPeriod)
+	}
+	fmt.Println(nextTick, "- next tick")
+	diff := nextTick.Sub(time.Now())
+	if t.timer == nil {
+		t.timer = time.NewTimer(diff)
+	} else {
+		t.timer.Reset(diff)
+	}
+}
 
 func main() {
+	for true {
+		runningRoutine()
+		RunAnalysis()
+	}
+}
 
+func RunAnalysis() {
 	var al *analyser.Analyser
 	al = analyser.InitAnalyser()
 	al.ReadDecoyList()
@@ -27,4 +71,5 @@ func main() {
 	al.CalculateAverageFailureRateForEachCountry()
 	al.UpdateActiveDecoyList()
 	al.WriteDecoyReportFor("IRStats","IR", 100, 1)
+
 }
