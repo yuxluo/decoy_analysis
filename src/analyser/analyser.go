@@ -462,6 +462,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 				if value, exist := coolDownStats[decoyIP]; exist {
 					value.daysRemaining = value.NextBenchDays
 					value.NextBenchDays *= 2
+					coolDownStats[decoyIP] = value
 				} else {
 					coolDownStats[decoyIP] = CoolDown{
 						daysRemaining: 1,
@@ -490,6 +491,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 		for _, item := range al.completeDecoyList {
 			if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist {
 				_, _ = fmt.Fprintf(activeWriter, item + "\n")
+			} else {
+				if coolDownStats[strings.Split(item, ",")[0]].daysRemaining == 0 {
+					_, _ = fmt.Fprintf(activeWriter, item + "\n")
+				}
 			}
 		}
 		_ = activeWriter.Flush()
