@@ -1,3 +1,6 @@
 [submodule "decoy-lists"]
 	path = decoy-lists
 	url = https://github.com/refraction-networking/decoy-lists
+[submodule "ipisp"]
+	path = ipisp
+	url = https://github.com/ammario/ipisp
