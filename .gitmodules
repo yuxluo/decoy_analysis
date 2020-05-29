@@ -1,3 +1,3 @@
 [submodule "ipisp"]
 	path = src/github.com/ammario/ipisp
-	url = https://github.com/ammario/ipisp
+	url = git@github.com:ammario/ipisp.git
