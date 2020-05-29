@@ -21,6 +21,7 @@ func runningRoutine() {
 	for {
 		<-jobTicker.timer.C
 		fmt.Println(time.Now(), "- just ticked")
+		RunAnalysis()
 		jobTicker.updateTimer()
 	}
 }
@@ -43,7 +44,6 @@ func (t *jobTicker) updateTimer() {
 func main() {
 	for true {
 		runningRoutine()
-		RunAnalysis()
 	}
 }
 
