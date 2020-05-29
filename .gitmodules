@@ -1,0 +1,3 @@
+[submodule "ipisp"]
+	path = ipisp
+	url = https://github.com/ammario/ipisp
