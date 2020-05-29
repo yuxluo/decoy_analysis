@@ -10,8 +10,10 @@ This program benches sub-par decoys for each country to lower the perceived fail
 
 
 ## Installation & Usage
+Clone the repo and its dependencies
+```go get -d -u -t github.com/yuxluo/decoy_analysis/...```
 
-I can't get it to work please help. For now run it in GoLand.
+
 
 ## How It Works
 When running, the program will update the active decoy lists once per day at 5 minutes past midnight. The program fetches the newest decoy list and yesterday's log.
