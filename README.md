@@ -11,7 +11,12 @@ This program benches sub-par decoys for each country to lower the perceived fail
 
 ## Installation & Usage
 Clone the repo and its dependencies
+
 ```go get -d -u -t github.com/yuxluo/decoy_analysis/...```
+
+```cd ${GOPATH:-~/go}/src/github.com/yuxluo/decoy_analysis/runanalyser```
+
+```go run main.go```
 
 
 
