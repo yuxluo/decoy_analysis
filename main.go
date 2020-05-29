@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yuxluo/decoy_analysis/analyser"
+	"analyser"
 	"fmt"
 	"time"
 )
