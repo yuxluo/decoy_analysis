@@ -429,6 +429,9 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	const amnesty = 0.05
 
 	for countryCode, countryInfo := range al.countryStats {
+		if countryCode == "" || countryCode == "Unknown" {
+			continue
+		}
 		coolDownStats := make(map[string]CoolDown)
 		benchedFile, err := os.Open("./list/" + countryCode + "_Benched.csv")
 		if err == nil { // There exist benched decoys for this country
