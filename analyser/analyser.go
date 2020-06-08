@@ -41,6 +41,7 @@ type Analyser struct {
 	countryChannel chan Connection
 	decoyChannel chan Connection
 	completeDecoyList []string
+	probMap map[string]int
 }
 
 
@@ -52,6 +53,7 @@ func InitAnalyser() *Analyser{
 	al.ipToHostname = make(map[string]string)
 	al.countryChannel = make(chan Connection, 64)
 	al.decoyChannel = make(chan Connection, 64)
+	al.probMap = make(map[string]int)
 	return al
 }
 
@@ -179,6 +181,58 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 			}
 		}
 	}
+}
+
+func (al *Analyser) ReadProbData() {
+	f, err := os.Open("/home/home/go/src/github.com/yuxluo/decoy_analysis/runanalyser/iran.dat")
+	defer f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	numTotal := 0
+	scanner := bufio.NewScanner(f)
+	for {
+		scanner.Scan()
+		if scanner.Text() == "" {
+			break
+		} else {
+			numTotal++
+			splitText := strings.Split(scanner.Text(), " ")
+			decoyIP := strings.Split(splitText[5], ":")[0]
+			if decoyIP[0] == '[' {
+				continue
+			}
+			if splitText[8] == "failed:" {
+				if _, exist := al.probMap[decoyIP]; !exist {
+					al.probMap[decoyIP] = 1
+				} else {
+					al.probMap[decoyIP]++
+				}
+			}
+
+		}
+	}
+	numTotal /= 3
+	numOnes := 0
+	numTwos :=0
+	numThrees := 0
+	for key, value := range al.probMap {
+		switch value {
+		case 1:
+			numOnes++
+		case 2:
+			numTwos++
+		case 3:
+			numThrees++
+		default:
+			println(key, " ", value)
+		}
+	}
+
+	fmt.Printf("%v/%v decoys have 0 failure (%v)\n", numTotal - numOnes - numTwos - numThrees, numTotal, float64(numTotal - numOnes - numTwos - numThrees) / float64(numTotal))
+	fmt.Printf("%v/%v decoys have 1 failure (%v)\n", numOnes, numTotal, float64(numOnes) / float64(numTotal))
+	fmt.Printf("%v/%v decoys have 2 failure (%v)\n", numTwos, numTotal, float64(numTwos) / float64(numTotal))
+	fmt.Printf("%v/%v decoys have 3 failure (%v)\n", numThrees, numTotal, float64(numThrees) / float64(numTotal))
 }
 
 func (al *Analyser) ReadDecoyList() {
@@ -419,8 +473,9 @@ func (al *Analyser) CalculateAverageFailureRateForEachCountry() {
 
 }
 
-func (al *Analyser) UpdateActiveDecoyList() {
 
+
+func (al *Analyser) UpdateActiveDecoyList() {
 	/*
 	Benching Criteria:
 		Failure Rate > daily average for each country + 0.05

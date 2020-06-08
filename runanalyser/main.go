@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/yuxluo/decoy_analysis/analyser"
 	"fmt"
+	"github.com/yuxluo/decoy_analysis/analyser"
 	"time"
 )
 const IntervalPeriod time.Duration = 24 * time.Hour
@@ -48,9 +48,13 @@ func main() {
 	}
 }
 
+
+
+
 func RunAnalysis() {
 	var al *analyser.Analyser
 	al = analyser.InitAnalyser()
+	al.ReadProbData()
 	al.ReadDecoyList()
 	al.FetchLog()
 	al.ReadLog()
