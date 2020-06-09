@@ -201,7 +201,6 @@
 208.79.212.226,locations.completebatterysource.com,53292,125000,32256
 208.79.212.229,www.3dlandscapegroup.com,53292,124997,32256
 208.79.212.228,www.american-water.us,53292,125018,32256
-136.228.59.110,www.oaisd.org,2882,124997,16616
 208.64.38.12,www.inflatableoffice.com,53292,124999,16640
 141.214.199.10,apigw.it.umich.edu,36375,124992,17792
 141.211.160.19,www.dsc.umich.edu,36375,124990,17792
@@ -1111,7 +1110,6 @@
 64.49.112.101,www.powerschool.byroncentercharter.org,39987,124978,263168
 35.8.35.147,nsauth.nscl.msu.edu,231,124990,130816
 198.110.203.50,synstor1.nmu.edu,237,124996,31104
-141.209.175.12,www.se.cmich.edu,27274,125000,31104
 64.49.112.103,moodle.kentisd.net,39987,124996,31104
 64.113.59.185,ms-reportbuilder-val.healthsafetyinstitute.com,53292,124999,31104
 64.113.59.187,www.maxisealharness.com,53292,125000,31104
@@ -2330,7 +2328,6 @@
 35.8.12.197,webhosting4.itservices.msu.edu,237,120000,16768
 35.8.12.195,webhosting4.itservices.msu.edu,237,120000,16768
 141.211.55.23,fusion.sph.umich.edu,36375,51288,32256
-198.111.176.116,wcclib.wccnet.edu,237,61288,16640
 208.68.25.237,www.remc1.net,237,60753,131328
 35.8.12.25,webhosting4.itservices.msu.edu,237,120000,16768
 207.73.7.26,vpn.norcocmh.org,237,59539,32512

@@ -43,9 +43,9 @@ func (t *jobTicker) updateTimer() {
 
 func main() {
 	RunAnalysis()
-	for true {
-		runningRoutine()
-	}
+	//for true {
+	//	runningRoutine()
+	//}
 }
 
 
@@ -56,13 +56,26 @@ func RunAnalysis() {
 	al = analyser.InitAnalyser()
 	al.ReadProbData()
 	al.ReadDecoyList()
-	al.FetchLog()
-	al.ReadLog()
-
 	terminationChannel1 := make(chan bool)
 	terminationChannel2 := make(chan bool)
 	go al.ProcessCountryChannel(terminationChannel2)
 	go al.ProcessDecoyChannel(terminationChannel1)
+	for i := -1; ;i-- {
+		date := time.Now().AddDate(0, 0, i).Format("2006-01-02")
+		if date == "2020-05-18" {
+			break
+		} else {
+			al.Mu.Lock()
+			al.ThreadsAlive++
+			println("Threads alive: ", al.ThreadsAlive)
+			al.Mu.Unlock()
+			al.FetchLog(date)
+			al.ReadLog(date)
+		}
+	}
+
+
+
 	for _ = range terminationChannel1 {}
 	for _ = range terminationChannel2 {}
 
@@ -75,6 +88,6 @@ func RunAnalysis() {
 
 	al.CalculateAverageFailureRateForEachCountry()
 	al.UpdateActiveDecoyList()
-	al.WriteDecoyReportFor("IRStats","IR", 100, 1)
+	al.WriteDecoyReportFor("InterSect","IR", 100, 1)
 
 }

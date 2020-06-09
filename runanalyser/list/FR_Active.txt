@@ -2724,7 +2724,6 @@
 164.76.158.106,emich.edu,237,30250,66304
 141.216.116.30,barracuda1.umflint.edu,237,60267,16640
 141.216.116.31,barracuda2.umflint.edu,237,60247,16640
-141.218.155.220,auxe.wmich.edu,237,30287,131072
 35.9.66.215,jefferson.lite.msu.edu,237,51250,31360
 141.211.4.13,mprint-test.dsc.umich.edu,36375,61286,17792
 35.8.12.43,webhosting4.itservices.msu.edu,237,120000,16768

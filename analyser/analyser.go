@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,13 +36,15 @@ type Connection struct {
 }
 
 type Analyser struct {
-	countryStats map[string]*AggregatedCountryStats // Country name -> stats
-	decoyStats map[string]*StatsForSpecificDecoy // Decoy ip -> stats
-	ipToHostname map[string]string
-	countryChannel chan Connection
-	decoyChannel chan Connection
+	countryStats      map[string]*AggregatedCountryStats // Country name -> stats
+	decoyStats        map[string]*StatsForSpecificDecoy // Decoy ip -> stats
+	ipToHostname      map[string]string
+	CountryChannel    chan Connection
+	DecoyChannel      chan Connection
 	completeDecoyList []string
-	probMap map[string]int
+	probMap           map[string]int
+	ThreadsAlive 		int
+	Mu 					sync.Mutex
 }
 
 
@@ -51,8 +54,8 @@ func InitAnalyser() *Analyser{
 	al.countryStats = make(map[string]*AggregatedCountryStats)
 	al.decoyStats = make(map[string]*StatsForSpecificDecoy)
 	al.ipToHostname = make(map[string]string)
-	al.countryChannel = make(chan Connection, 64)
-	al.decoyChannel = make(chan Connection, 64)
+	al.CountryChannel = make(chan Connection, 1024)
+	al.DecoyChannel = make(chan Connection, 1024)
 	al.probMap = make(map[string]int)
 	return al
 }
@@ -82,10 +85,9 @@ func ShelloutParentDir(command string) (error, string, string) {
 	return err, stdout.String(), stderr.String()
 }
 
-func (al *Analyser) FetchLog() {
+func (al *Analyser) FetchLog(date string) {
 	err, currentDir, stderr := ShelloutParentDir("pwd")
-	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
+	targetFileName := "tapdance-" + date + ".log.gz"
 	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
 	SCPCommand += targetFileName
 	SCPCommand += " "
@@ -100,9 +102,8 @@ func (al *Analyser) FetchLog() {
 	return
 }
 
-func (al *Analyser) ReadLog() {
-	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	targetFileName := "tapdance-" + yesterdayDate + ".log"
+func (al *Analyser) ReadLog(date string) {
+	targetFileName := "tapdance-" + date + ".log"
 	fmt.Printf("Parsing %v ...\n", targetFileName)
 
 	file, _ := os.Open(targetFileName)
@@ -118,10 +119,15 @@ func (al *Analyser) ReadLog() {
 			}
 		}
 
-		fmt.Printf("Finished parsing %v, closing channels ...\n", targetFileName)
 		time.Sleep(10 * time.Second)
-		close(al.countryChannel)
-		close(al.decoyChannel)
+		al.Mu.Lock()
+		al.ThreadsAlive--
+		println("Threads alive: ", al.ThreadsAlive)
+		if al.ThreadsAlive == 0 {
+			close(al.CountryChannel)
+			close(al.DecoyChannel)
+		}
+		al.Mu.Unlock()
 		fmt.Printf("Removing %v ...\n", targetFileName)
 		_, _, _ = ShelloutParentDir("rm -rf " + targetFileName)
 	} ()
@@ -129,7 +135,7 @@ func (al *Analyser) ReadLog() {
 }
 
 func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
-	for connection := range al.decoyChannel {
+	for connection := range al.DecoyChannel {
 
 		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
 			al.decoyStats[connection.decoyIP] = new(StatsForSpecificDecoy)
@@ -146,7 +152,7 @@ func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
 }
 
 func (al *Analyser) ProcessCountryChannel(terminationChannel2 chan bool) {
-	for connection := range al.countryChannel {
+	for connection := range al.CountryChannel {
 		if _, exist := al.countryStats[connection.clientCountry]; !exist {
 			al.countryStats[connection.clientCountry] = new(AggregatedCountryStats)
 			al.countryStats[connection.clientCountry].decoyStatsForThisCountry = make(map[string]*StatsForSpecificDecoy)
@@ -175,16 +181,39 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 				message := syslog["message"].(string)
 				connection := ProcessMessage(message)
 				if connection.connectionType != "" {
-					al.decoyChannel <- connection
-					al.countryChannel <- connection
+					al.DecoyChannel <- connection
+					al.CountryChannel <- connection
 				}
 			}
 		}
 	}
 }
 
+func (al* Analyser) ReadCSV () {
+	f, err := os.Open("/root/go/src/github.com/yuxluo/decoy_analysis/runanalyser/decoystats.csv")
+	defer f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	scanner := bufio.NewScanner(f)
+	scanner.Scan()
+	for {
+		scanner.Scan()
+		if scanner.Text() == "" {
+			break
+		} else {
+			splitText := strings.Split(scanner.Text(), ",")
+			splitText[0] = strings.ReplaceAll(splitText[0], " ", "")
+			if splitText[3] != "Unknown" {
+				if value, exist := al.probMap[splitText[0]]; exist && value == 3 {
+					println(scanner.Text())
+				}
+			}
+		}
+	}
+}
 func (al *Analyser) ReadProbData() {
-	f, err := os.Open("/home/home/go/src/github.com/yuxluo/decoy_analysis/runanalyser/iran.dat")
+	f, err := os.Open("/root/go/src/github.com/yuxluo/decoy_analysis/runanalyser/iran.dat")
 	defer f.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -202,14 +231,12 @@ func (al *Analyser) ReadProbData() {
 			if decoyIP[0] == '[' {
 				continue
 			}
-			if splitText[8] == "failed:" {
-				if _, exist := al.probMap[decoyIP]; !exist {
-					al.probMap[decoyIP] = 1
-				} else {
-					al.probMap[decoyIP]++
-				}
+			if _, exist := al.probMap[decoyIP]; !exist {
+				al.probMap[decoyIP] = 0
 			}
-
+			if splitText[8] == "failed:" {
+				al.probMap[decoyIP]++
+			}
 		}
 	}
 	numTotal /= 3
@@ -568,14 +595,7 @@ func (al *Analyser) WriteDecoyReportFor(filename, country string, numberOfDecoys
 		return
 	}
 
-	var cumulativeSuccesses int
-	var cumulativeFailures int
-	for _, statsForEachDecoy := range al.countryStats[country].decoyStatsForThisCountry {
-		cumulativeFailures += statsForEachDecoy.numFailures
-		cumulativeSuccesses += statsForEachDecoy.numSuccesses
-	}
-	averageFailureRate := float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses)
-	f, _ := os.Create(filename + ".txt")
+	f, _ := os.Create("3_fails_intersection" + ".csv")
 	w := bufio.NewWriter(f)
 	type kv struct {
 		DecoyIP string
@@ -598,34 +618,31 @@ func (al *Analyser) WriteDecoyReportFor(filename, country string, numberOfDecoys
 		}
 	})
 
-	numberOfUnknownDomain := len(sortingSlice)
 	for i := 0; i < len(sortingSlice); i++ {
-		domain := "Unknown"
-		if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; found {
-			domain = al.ipToHostname[sortingSlice[i].DecoyIP]
-			numberOfUnknownDomain--
+		if value, exist := al.probMap[sortingSlice[i].DecoyIP]; exist && value == 3 {
+			domain := "Unknown"
+			if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; found {
+				domain = al.ipToHostname[sortingSlice[i].DecoyIP]
+			}
+			_, _ = fmt.Fprintf(w, "%v %v %v %v\n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
-		_, _ = fmt.Fprintf(w, "%v %v %v %v\n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 	}
 	_ = w.Flush()
+	f.Close()
 
-
-	sort.Slice(sortingSlice, func(i, j int) bool {
-		return sortingSlice[i].SampleSize > sortingSlice[j].SampleSize
-	})
-
-	unknownInTop100Count := 0
-	goodDecoyCount := 0
-	for i:= 0; goodDecoyCount < 100; i++ {
-		if sortingSlice[i].DecoyFailureRate < averageFailureRate {
-			goodDecoyCount++
-		}
-		if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; !found {
-			unknownInTop100Count++
+	f2, _ := os.Create("0_fail_intersection" + ".csv")
+	w2 := bufio.NewWriter(f2)
+	for i := 0; i < len(sortingSlice); i++ {
+		if value, exist := al.probMap[sortingSlice[i].DecoyIP]; exist && value == 0 {
+			domain := "Unknown"
+			if _, found := al.ipToHostname[sortingSlice[i].DecoyIP]; found {
+				domain = al.ipToHostname[sortingSlice[i].DecoyIP]
+			}
+			_, _ = fmt.Fprintf(w2, "%v %v %v %v\n", sortingSlice[i].DecoyIP, sortingSlice[i].DecoyFailureRate, sortingSlice[i].SampleSize, domain)
 		}
 	}
-
-	fmt.Printf("%v, #unique decoys: %v, percentage of decoys not in latest decoylist: %v, percentage of good decoy in top 100 decoys by popularity not in latest decoylist: %v\n", filename, len(sortingSlice), float64(numberOfUnknownDomain) / float64(len(sortingSlice)), float64(unknownInTop100Count)/float64(100))
+	_ = w2.Flush()
+	f2.Close()
 }
 
 
