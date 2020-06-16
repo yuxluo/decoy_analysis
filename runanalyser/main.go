@@ -71,6 +71,4 @@ func RunAnalysis() {
 
 	al.CalculateAverageFailureRateForEachCountry()
 	al.UpdateActiveDecoyList()
-	al.WriteDecoyReportFor("IRStats","IR", 100, 1)
-
 }

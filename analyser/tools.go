@@ -14,10 +14,10 @@ func GetCountryByIp(ip string) string{
 	defer client.Close()
 
 	resp, err := client.LookupIP(net.ParseIP(ip))
-	if err == nil {
+	if err == nil && resp.Country != ""{
 		return resp.Country
 	} else {
-		return "Unknown"
+		return "UNRESOLVED"
 	}
 }
 
