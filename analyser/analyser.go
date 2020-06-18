@@ -478,7 +478,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 		//write benching info to file
 		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Benched.csv")
 		if len(coolDownStats) != 0 {
-			benchedFile, _ = os.Create("./list/" + countryCode + "_Benched.csv")
+			benchedFile, err = os.Create("./list/" + countryCode + "_Benched.csv")
+			if err != nil {
+				println(err.Error())
+			}
 			benchWriter := bufio.NewWriter(benchedFile)
 			for decoyIP, coolDownInfo := range coolDownStats {
 				_, _ = fmt.Fprintf(benchWriter, "%v,%v,%v\n", decoyIP, coolDownInfo.daysRemaining, coolDownInfo.NextBenchDays)
