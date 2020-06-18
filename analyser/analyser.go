@@ -414,7 +414,7 @@ func (al *Analyser) CalculateAverageFailureRateForEachCountry() {
 			cumulativeSuccesses += statsForEachDecoy.numSuccesses
 		}
 		countryInfo.averageFailureRate = float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses)
-		fmt.Printf("The average failure rate for %v in the past day is %v \n", countryName, countryInfo.averageFailureRate)
+		fmt.Printf("The average failure rate for %v in the past day is %v(from %v reports) \n", countryName, countryInfo.averageFailureRate, cumulativeFailures + cumulativeSuccesses)
 	}
 
 }
@@ -492,20 +492,22 @@ func (al *Analyser) UpdateActiveDecoyList() {
 
 		//write active decoys to file
 		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Active.txt")
-		activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
-		activeWriter := bufio.NewWriter(activeFile)
-		for _, item := range al.completeDecoyList {
-			if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist {
-				_, _ = fmt.Fprintf(activeWriter, item + "\n")
-			} else {
-				if coolDownStats[strings.Split(item, ",")[0]].daysRemaining == 0 {
-					_, _ = fmt.Fprintf(activeWriter, item + "\n")
+		if len(coolDownStats) != 0 {
+			activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
+			activeWriter := bufio.NewWriter(activeFile)
+			for _, item := range al.completeDecoyList {
+				if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist {
+					_, _ = fmt.Fprintf(activeWriter, item+"\n")
+				} else {
+					if coolDownStats[strings.Split(item, ",")[0]].daysRemaining == 0 {
+						_, _ = fmt.Fprintf(activeWriter, item+"\n")
+					}
 				}
 			}
+			_ = activeWriter.Flush()
+			activeFile.Close()
+			fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
 		}
-		_ = activeWriter.Flush()
-		activeFile.Close()
-		fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
 	}
 }
 
