@@ -22,7 +22,6 @@ with open(args.key[0], 'rb') as f:
      message.default_pubkey.key = f.read()
 
 asMap = {}
-
 if args.asn != '':
     with open(args.asn, 'r') as csvfile:
         reader  = csv.reader(csvfile)
@@ -54,6 +53,6 @@ for line in csvfile:
 if args.pretty:
     print(message)
 else:
-    outFile = open('out.blob', 'wb')
+    outFile = open('../list/' + args.decoys + '.blob', 'wb')
     outFile.write(message.SerializeToString())
     # sys.stdout.write(message.SerializeToString())
