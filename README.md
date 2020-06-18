@@ -1,3 +1,4 @@
+# Moved to https://github.com/refraction-networking/dynamic_decoylist
 # Dynamic Decoy Lists Generator For TapDance
 
 This program benches sub-par decoys for each country to lower the perceived failure rate.
