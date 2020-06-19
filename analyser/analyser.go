@@ -218,6 +218,7 @@ func (al *Analyser) ReadDecoyList() {
 			al.ipToHostname[ip] = hostname
 		}
 	}
+	al.completeDecoyList = al.completeDecoyList[:len(al.completeDecoyList)-1]
 	_ = os.Chdir("..")
 	println("Cleaning up decoy-lists ...")
 	err, stdout, _ = ShelloutParentDir("rm -rf decoy-lists")
@@ -429,9 +430,6 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	const amnesty = 0.05
 
 	for countryCode, countryInfo := range al.countryStats {
-		if countryCode == "" || countryCode == "Unknown" {
-			continue
-		}
 		coolDownStats := make(map[string]CoolDown)
 		benchedFile, err := os.Open("./list/" + countryCode + "_Benched.csv")
 		if err == nil { // There exist benched decoys for this country
@@ -496,7 +494,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
 			activeWriter := bufio.NewWriter(activeFile)
 			for _, item := range al.completeDecoyList {
-				if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist {
+				if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist{
 					_, _ = fmt.Fprintf(activeWriter, item+"\n")
 				} else {
 					if coolDownStats[strings.Split(item, ",")[0]].daysRemaining == 0 {
@@ -509,6 +507,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
 		}
 	}
+	_ = os.Chdir("./runanalyser/protowrapper")
+	_,_,_ = ShelloutParentDir("sh run.sh")
+	_ = os.Chdir("..")
+	_ = os.Chdir("..")
 }
 
 
