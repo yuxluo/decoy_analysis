@@ -176,10 +176,17 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 }
 
 func (al *Analyser) ReadDecoyList() {
+	os.Chdir(al.mainDir)
 	println("Pulling decoy-lists from github ...")
-	err, stdout, _ := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
+	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
+	if err == nil && stderr == "" {
+
+	} else {
+		println(err)
+		println(stderr)
+	}
 	os.Chdir("./decoy-lists")
-	err, stdout, _ = execShell("ls")
+	_, stdout, _ = execShell("ls")
 	files := strings.Split(stdout, "\n")
 	sampleName := "-decoys.txt"
 	fileNameOfLatestDecoyList := ""
