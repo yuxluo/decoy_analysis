@@ -400,7 +400,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 		//write active decoys to file
 		_, _, _ = execShell("rm -f" + countryCode + "_Active.txt")
 		if len(coolDownStats) != 0 {
-			activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
+			activeFile, _ := os.Create(countryCode + "_Active.txt")
 			activeWriter := bufio.NewWriter(activeFile)
 			for _, item := range al.completeDecoyList {
 				if _, exist := coolDownStats[strings.Split(item, ",")[0]]; !exist{
@@ -453,7 +453,6 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			}
 		}
 	} else {
-		println(err)
 		println(stderr)
 	}
 
