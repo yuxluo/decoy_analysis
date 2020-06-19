@@ -370,6 +370,47 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
 		}
 	}
+
+	// Now deal with previous benched decoys for countries not on al.countryStats
+	err, stdout, stderr := execShell("ls | grep *.csv")
+	if err == nil && stderr == "" {
+		benchFiles := strings.Split(stdout, "\n")
+		for _, benchFileName := range benchFiles {
+			countryCode := strings.Split(benchFileName, "_")[0]
+			if _, exist := al.countryStats[countryCode]; !exist {
+				coolDownStats := make(map[string]CoolDown)
+				benchedFile, err := os.Open("./" + countryCode + "_Benched.csv")
+				if err == nil { // There exist benched decoys for this country
+					scanner := bufio.NewScanner(benchedFile)
+					for scanner.Scan() {
+						line := strings.Split(scanner.Text(), ",")
+						IP := line[0]
+						daysRemaining, _ := strconv.Atoi(line[1])
+						NextBenchDays, _ := strconv.Atoi(line[2])
+						coolDownStats[IP] = CoolDown{daysRemaining: daysRemaining, NextBenchDays: NextBenchDays}
+					}
+
+					for key, value := range coolDownStats {
+						if value.daysRemaining == 0 {
+							value.NextBenchDays--
+							if value.NextBenchDays <= 0 {
+								delete(coolDownStats, key)
+							}
+						} else {
+							value.daysRemaining--
+						}
+					}
+					benchedFile.Close()
+					_, _, _ = execShell("rm -f" + countryCode + "_Benched.csv")
+				}
+			}
+		}
+	} else {
+		println(err)
+		println(stderr)
+	}
+
+
 	_ = os.Chdir(al.mainDir)
 	_ = os.Chdir("protowrapper")
 	_,_,_ = execShell("sh run.sh")
