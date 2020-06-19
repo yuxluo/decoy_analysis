@@ -418,7 +418,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	}
 
 	// Now deal with previous benched decoys for countries not on al.countryStats
-	err, stdout, stderr := execShell("ls | grep *.csv")
+	err, stdout, stderr := execShell("ls | grep .csv")
 	if err == nil && stderr == "" {
 		benchFiles := strings.Split(stdout, "\n")
 		for _, benchFileName := range benchFiles {
