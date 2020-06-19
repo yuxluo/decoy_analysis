@@ -453,7 +453,6 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			}
 		}
 	} else {
-		println(err)
 		println(stderr)
 	}
 
