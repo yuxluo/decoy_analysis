@@ -70,9 +70,75 @@ func execShell(command string) (error, string, string) {
 	return err, stdout.String(), stderr.String()
 }
 
+func directoryChanged() {
+	err, stdout, stderr := execShell("pwd")
+	if err == nil && stderr == "" {
+		fmt.Printf("Directory has been changed to %v", stdout)
+	}
+}
+
+func cd(dir string) {
+	cd(dir)
+	directoryChanged()
+}
+
+func (al *Analyser) ReadDecoyList() {
+	cd(al.mainDir)
+	println("Pulling decoy-lists from github ...")
+	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
+	if err == nil && stderr == "" {
+		cd("decoy-lists")
+		cd("./decoy-lists")
+		_, stdout, _ = execShell("ls")
+		files := strings.Split(stdout, "\n")
+		sampleName := "-decoys.txt"
+		fileNameOfLatestDecoyList := ""
+
+		for _, fileName := range files {
+			if CheckEnd(fileName, sampleName) {
+				fileNameOfLatestDecoyList = fileName
+			}
+		}
+
+		fmt.Printf("Reading %v ...\n", fileNameOfLatestDecoyList)
+		f, err := os.Open(fileNameOfLatestDecoyList)
+		defer f.Close()
+		if err != nil {
+			println(err)
+		}
+		scanner := bufio.NewScanner(f)
+		scanner.Scan()
+
+		for {
+			scanner.Scan()
+			al.completeDecoyList = append(al.completeDecoyList, scanner.Text())
+			row := strings.Split(scanner.Text(), string(','))
+			if scanner.Text() == "" {
+				break
+			} else {
+				ip := row[0]
+				hostname := row[1]
+				al.ipToHostname[ip] = hostname
+			}
+		}
+		al.completeDecoyList = al.completeDecoyList[:len(al.completeDecoyList)-1] //empty line at the end
+		cd(al.mainDir)
+		println("Cleaning up decoy-lists ...")
+		err, stdout, stderr = execShell("rm -rf decoy-lists")
+		if err != nil || stderr != "" {
+			println(err)
+			println(stderr)
+		}
+	} else {
+		println(err)
+		println(stderr)
+	}
+
+}
+
 func (al *Analyser) FetchLog() {
-	os.Chdir(al.mainDir)
-	defer os.Chdir(al.mainDir)
+	cd(al.mainDir)
+	defer cd(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
 	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
@@ -90,8 +156,8 @@ func (al *Analyser) FetchLog() {
 }
 
 func (al *Analyser) ReadLog() {
-	os.Chdir(al.mainDir)
-	defer os.Chdir(al.mainDir)
+	cd(al.mainDir)
+	defer cd(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log"
 	fmt.Printf("Parsing %v ...\n", targetFileName)
@@ -114,7 +180,7 @@ func (al *Analyser) ReadLog() {
 		close(al.countryChannel)
 		close(al.decoyChannel)
 		fmt.Printf("Removing %v ...\n", targetFileName)
-		os.Chdir(al.mainDir)
+		cd(al.mainDir)
 		_, _, _ = execShell("rm -rf " + targetFileName)
 	} ()
 
@@ -175,54 +241,6 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 	}
 }
 
-func (al *Analyser) ReadDecoyList() {
-	os.Chdir(al.mainDir)
-	println("Pulling decoy-lists from github ...")
-	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
-	if err == nil && stderr == "" {
-
-	} else {
-		println(err)
-		println(stderr)
-	}
-	os.Chdir("./decoy-lists")
-	_, stdout, _ = execShell("ls")
-	files := strings.Split(stdout, "\n")
-	sampleName := "-decoys.txt"
-	fileNameOfLatestDecoyList := ""
-
-	for _, item := range files {
-		if CheckEnd(item, sampleName) {
-			fileNameOfLatestDecoyList = item
-		}
-	}
-
-	fmt.Printf("Reading %v ...\n", fileNameOfLatestDecoyList)
-	f, err := os.Open(fileNameOfLatestDecoyList)
-	defer f.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	scanner := bufio.NewScanner(f)
-	scanner.Scan()
-
-	for {
-		scanner.Scan()
-		al.completeDecoyList = append(al.completeDecoyList, scanner.Text())
-		row := strings.Split(scanner.Text(), string(','))
-		if scanner.Text() == "" {
-			break
-		} else {
-			ip := row[0]
-			hostname := row[1]
-			al.ipToHostname[ip] = hostname
-		}
-	}
-	al.completeDecoyList = al.completeDecoyList[:len(al.completeDecoyList)-1]
-	_ = os.Chdir(al.mainDir)
-	println("Cleaning up decoy-lists ...")
-	err, stdout, _ = execShell("rm -rf decoy-lists")
-}
 
 func (al *Analyser)ComputeFailureRateForCountry(terminationChannel chan bool) {
 	println("Computing failure rate for each country ...")
@@ -296,8 +314,8 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	 */
 
 	const amnesty = 0.05
-	os.Chdir(al.mainDir)
-	os.Chdir("list")
+	cd(al.mainDir)
+	cd("list")
 
 	for countryCode, countryInfo := range al.countryStats {
 		coolDownStats := make(map[string]CoolDown)
@@ -418,10 +436,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	}
 
 
-	_ = os.Chdir(al.mainDir)
-	_ = os.Chdir("protowrapper")
+	cd(al.mainDir)
+	cd("protowrapper")
 	_,_,_ = execShell("sh run.sh")
-	os.Chdir(al.mainDir)
+	cd(al.mainDir)
 }
 
 
