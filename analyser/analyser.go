@@ -81,7 +81,7 @@ func directoryChanged() {
 func cd(dir string) {
 	err := os.Chdir(dir)
 	if err != nil {
-		println(err)
+		println(err.Error())
 	} else {
 		directoryChanged()
 	}
@@ -95,12 +95,12 @@ func (al *Analyser) ReadDecoyList() {
 		cd("decoy-lists")
 		_, stdout, _ = execShell("ls")
 		files := strings.Split(stdout, "\n")
-		sampleName := "-decoys.txt"
 		fileNameOfLatestDecoyList := ""
 
-		for _, fileName := range files {
-			if CheckEnd(fileName, sampleName) {
-				fileNameOfLatestDecoyList = fileName
+		for i := len(files) - 1; i >= 0; i-- {
+			if strings.HasSuffix(files[i], "-decoys.txt") {
+				fileNameOfLatestDecoyList = files[i]
+				break
 			}
 		}
 
@@ -108,7 +108,7 @@ func (al *Analyser) ReadDecoyList() {
 		f, err := os.Open(fileNameOfLatestDecoyList)
 		defer f.Close()
 		if err != nil {
-			println(err)
+			println(err.Error())
 		}
 		scanner := bufio.NewScanner(f)
 		scanner.Scan()
@@ -130,14 +130,14 @@ func (al *Analyser) ReadDecoyList() {
 		println("Cleaning up decoy-lists ...")
 		err, stdout, stderr = execShell("rm -rf decoy-lists")
 		if err != nil || stderr != "" {
-			println(err)
 			println(stderr)
+			if err != nil {
+				println(err.Error())
+			}
 		}
 	} else {
-		println(err)
-		println(stderr)
+		println(err.Error())
 	}
-
 }
 
 func (al *Analyser) FetchLog() {
