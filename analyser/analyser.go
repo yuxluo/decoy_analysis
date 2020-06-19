@@ -53,6 +53,7 @@ func InitAnalyser() *Analyser{
 	al.countryChannel = make(chan Connection, 64)
 	al.decoyChannel = make(chan Connection, 64)
 	_, currentDir, _ := execShell("pwd")
+	currentDir = currentDir[:len(currentDir) - 1] + "/"
 	al.mainDir = currentDir
 	return al
 }
