@@ -78,15 +78,19 @@ func directoryChanged() {
 }
 
 func cd(dir string) {
-	os.Chdir(dir)
-	directoryChanged()
+	err := os.Chdir(dir)
+	if err != nil {
+		println(err)
+	} else {
+		directoryChanged()
+	}
 }
 
 func (al *Analyser) ReadDecoyList() {
 	cd(al.mainDir)
 	println("Pulling decoy-lists from github ...")
 	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
-	if err == nil && stderr == "" {
+	if err == nil {
 		cd("decoy-lists")
 		_, stdout, _ = execShell("ls")
 		files := strings.Split(stdout, "\n")
