@@ -43,9 +43,10 @@ func (t *jobTicker) updateTimer() {
 
 func main() {
 	RunAnalysis()
-	for true {
-		runningRoutine()
-	}
+	RunAnalysis()
+	//for true {
+	//	runningRoutine()
+	//}
 }
 
 func RunAnalysis() {
