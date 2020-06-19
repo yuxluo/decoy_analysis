@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
+	_ "log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -34,15 +34,15 @@ type Connection struct {
 }
 
 type Analyser struct {
-	countryStats map[string]*AggregatedCountryStats // Country name -> stats
-	decoyStats map[string]*StatsForSpecificDecoy // Decoy ip -> stats
-	ipToHostname map[string]string
-	countryChannel chan Connection
-	decoyChannel chan Connection
+	countryStats      map[string]*AggregatedCountryStats // Country name -> stats
+	decoyStats        map[string]*StatsForSpecificDecoy // Decoy ip -> stats
+	ipToHostname      map[string]string
+	countryChannel    chan Connection
+	decoyChannel      chan Connection
 	completeDecoyList []string
-	mainDir string
+	mainDir           string
+	FatalError        bool
 }
-
 
 
 func InitAnalyser() *Analyser{
@@ -59,6 +59,22 @@ func InitAnalyser() *Analyser{
 }
 
 const ShellToUse = "bash"
+
+func (al *Analyser) checkForError(err error, stderr string) bool {
+	if err != nil {
+		println(err.Error())
+		al.FatalError = true
+	}
+	if stderr != "" {
+		println(stderr)
+		al.FatalError = true
+	}
+	if al.FatalError == true {
+		return true
+	} else {
+		return false
+	}
+}
 
 func execShell(command string) (error, string, string) {
 	var stdout bytes.Buffer
@@ -78,21 +94,19 @@ func directoryChanged() {
 	}
 }
 
-func cd(dir string) {
+func (al *Analyser) cd(dir string) {
 	err := os.Chdir(dir)
-	if err != nil {
-		println(err.Error())
-	} else {
+	if !al.checkForError(err, "") {
 		directoryChanged()
 	}
 }
 
 func (al *Analyser) ReadDecoyList() {
-	cd(al.mainDir)
+	al.cd(al.mainDir)
 	println("Pulling decoy-lists from github ...")
 	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
-	if err == nil {
-		cd("decoy-lists")
+	if !al.checkForError(err, "") {
+		al.cd("decoy-lists")
 		_, stdout, _ = execShell("ls")
 		files := strings.Split(stdout, "\n")
 		fileNameOfLatestDecoyList := ""
@@ -126,7 +140,7 @@ func (al *Analyser) ReadDecoyList() {
 			}
 		}
 		al.completeDecoyList = al.completeDecoyList[:len(al.completeDecoyList)-1] //empty line at the end
-		cd(al.mainDir)
+		al.cd(al.mainDir)
 		println("Cleaning up decoy-lists ...")
 		err, stdout, stderr = execShell("rm -rf decoy-lists")
 		if err != nil || stderr != "" {
@@ -135,14 +149,14 @@ func (al *Analyser) ReadDecoyList() {
 				println(err.Error())
 			}
 		}
-	} else {
-		println(err.Error())
 	}
 }
 
 func (al *Analyser) FetchLog() {
-	cd(al.mainDir)
-	defer cd(al.mainDir)
+	if al.FatalError == true {
+		return
+	}
+	al.cd(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
 	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
@@ -151,48 +165,49 @@ func (al *Analyser) FetchLog() {
 	SCPCommand += al.mainDir
 	fmt.Printf("Retrieving %v from Greed ...\n", targetFileName)
 	err, _, stderr := execShell(SCPCommand)
-	if err != nil || stderr != "" {
-		log.Fatal(err)
+	if !al.checkForError(err, stderr) {
+		fmt.Printf("Decompressing %v ...\n", targetFileName)
+		err, _, stderr = execShell("gunzip " + targetFileName)
+		al.checkForError(err, stderr)
 	}
-	fmt.Printf("Decompressing %v ...\n", targetFileName)
-	err, _, stderr = execShell("gunzip " + targetFileName)
-	return
 }
 
 func (al *Analyser) ReadLog() {
-	cd(al.mainDir)
-	defer cd(al.mainDir)
+	if al.FatalError == true {
+		return
+	}
+	al.cd(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log"
 	fmt.Printf("Parsing %v ...\n", targetFileName)
 
-	file, _ := os.Open(targetFileName)
-	decoder := json.NewDecoder(file)
-	go func() {
-		for true {
-			v := new(map[string]interface{})
-			err := decoder.Decode(v)
-			if err != nil {
-				break
-			} else {
-				go al.ProcessMessage(v)
+	file, err := os.Open(targetFileName)
+	if !al.checkForError(err, "") {
+		decoder := json.NewDecoder(file)
+		go func() {
+			for true {
+				v := new(map[string]interface{})
+				err := decoder.Decode(v)
+				if err != nil {
+					break
+				} else {
+					go al.ProcessMessage(v)
+				}
 			}
-		}
 
-		fmt.Printf("Finished parsing %v, closing channels ...\n", targetFileName)
-		time.Sleep(10 * time.Second)
-		close(al.countryChannel)
-		close(al.decoyChannel)
-		fmt.Printf("Removing %v ...\n", targetFileName)
-		cd(al.mainDir)
-		_, _, _ = execShell("rm -rf " + targetFileName)
-	} ()
-
+			fmt.Printf("Finished parsing %v, closing channels ...\n", targetFileName)
+			time.Sleep(10 * time.Second)
+			close(al.countryChannel)
+			close(al.decoyChannel)
+			fmt.Printf("Removing %v ...\n", targetFileName)
+			al.cd(al.mainDir)
+			_, _, _ = execShell("rm -rf " + targetFileName)
+		} ()
+	}
 }
 
 func (al * Analyser) ProcessDecoyChannel(terminationChannel1 chan bool) {
 	for connection := range al.decoyChannel {
-
 		if _, exist := al.decoyStats[connection.decoyIP]; !exist {
 			al.decoyStats[connection.decoyIP] = new(StatsForSpecificDecoy)
 		}
@@ -248,7 +263,6 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 
 func (al *Analyser)ComputeFailureRateForCountry(terminationChannel chan bool) {
 	println("Computing failure rate for each country ...")
-
 	for _, statsForEachCountry := range al.countryStats {
 		for _,statsForEachDecoy := range statsForEachCountry.decoyStatsForThisCountry {
 			statsForEachDecoy.failureRate = float64(statsForEachDecoy.numFailures) / (float64(statsForEachDecoy.numFailures) + float64(statsForEachDecoy.numSuccesses))
@@ -268,7 +282,7 @@ func (al *Analyser) ComputeFailureRateForDecoy(terminationChannel chan bool) {
 	close(terminationChannel)
 }
 
-func ProcessMessage(message string) (Connection) {
+func ProcessMessage(message string) Connection {
 	splitMessage := strings.Split(message, " ")
 	var connection Connection
 
@@ -311,20 +325,23 @@ func (al *Analyser) CalculateAverageFailureRateForEachCountry() {
 }
 
 func (al *Analyser) UpdateActiveDecoyList() {
-
+	if al.FatalError == true {
+		return
+	}
 	/*
 	Benching Criteria:
 		Failure Rate > daily average for each country + 0.05
 	 */
 
 	const amnesty = 0.05
-	cd(al.mainDir)
-	cd("list")
+	al.cd(al.mainDir)
+	al.cd("list")
 
 	for countryCode, countryInfo := range al.countryStats {
 		coolDownStats := make(map[string]CoolDown)
 		benchedFile, err := os.Open("./" + countryCode + "_Benched.csv")
 		if err == nil { // There exist benched decoys for this country
+			fmt.Printf("Processing %v_Benched.csv ...", countryCode)
 			scanner := bufio.NewScanner(benchedFile)
 			for scanner.Scan() {
 				line := strings.Split(scanner.Text(), ",")
@@ -410,6 +427,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 				coolDownStats := make(map[string]CoolDown)
 				benchedFile, err := os.Open("./" + countryCode + "_Benched.csv")
 				if err == nil { // There exist benched decoys for this country
+					fmt.Printf("Processing %v_Benched.csv ...", countryCode)
 					scanner := bufio.NewScanner(benchedFile)
 					for scanner.Scan() {
 						line := strings.Split(scanner.Text(), ",")
@@ -440,10 +458,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	}
 
 
-	cd(al.mainDir)
-	cd("protowrapper")
+	al.cd(al.mainDir)
+	al.cd("protowrapper")
 	_,_,_ = execShell("sh run.sh")
-	cd(al.mainDir)
+	al.cd(al.mainDir)
 }
 
 
