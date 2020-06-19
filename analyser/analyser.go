@@ -40,6 +40,7 @@ type Analyser struct {
 	countryChannel chan Connection
 	decoyChannel chan Connection
 	completeDecoyList []string
+	mainDir string
 }
 
 
@@ -51,24 +52,14 @@ func InitAnalyser() *Analyser{
 	al.ipToHostname = make(map[string]string)
 	al.countryChannel = make(chan Connection, 64)
 	al.decoyChannel = make(chan Connection, 64)
+	_, currentDir, _ := execShell("pwd")
+	al.mainDir = currentDir
 	return al
 }
 
 const ShellToUse = "bash"
 
-func Shellout(command string) (error, string, string) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	cmd := exec.Command(ShellToUse, "-c", command)
-	cmd.Dir = "decoy-lists"
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return err, stdout.String(), stderr.String()
-}
-
-func ShelloutParentDir(command string) (error, string, string) {
+func execShell(command string) (error, string, string) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -80,25 +71,27 @@ func ShelloutParentDir(command string) (error, string, string) {
 }
 
 func (al *Analyser) FetchLog() {
-	err, currentDir, stderr := ShelloutParentDir("pwd")
-	println("Working Directory is: ", currentDir)
+	os.Chdir(al.mainDir)
+	defer os.Chdir(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
 	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
 	SCPCommand += targetFileName
 	SCPCommand += " "
-	SCPCommand += currentDir
+	SCPCommand += al.mainDir
 	fmt.Printf("Retrieving %v from Greed ...\n", targetFileName)
-	err, _, stderr = ShelloutParentDir(SCPCommand)
+	err, _, stderr := execShell(SCPCommand)
 	if err != nil || stderr != "" {
 		log.Fatal(err)
 	}
 	fmt.Printf("Decompressing %v ...\n", targetFileName)
-	err, _, stderr = ShelloutParentDir("gunzip " + targetFileName)
+	err, _, stderr = execShell("gunzip " + targetFileName)
 	return
 }
 
 func (al *Analyser) ReadLog() {
+	os.Chdir(al.mainDir)
+	defer os.Chdir(al.mainDir)
 	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	targetFileName := "tapdance-" + yesterdayDate + ".log"
 	fmt.Printf("Parsing %v ...\n", targetFileName)
@@ -121,7 +114,8 @@ func (al *Analyser) ReadLog() {
 		close(al.countryChannel)
 		close(al.decoyChannel)
 		fmt.Printf("Removing %v ...\n", targetFileName)
-		_, _, _ = ShelloutParentDir("rm -rf " + targetFileName)
+		os.Chdir(al.mainDir)
+		_, _, _ = execShell("rm -rf " + targetFileName)
 	} ()
 
 }
@@ -183,8 +177,9 @@ func (al *Analyser) ProcessMessage(v *map[string]interface{}) {
 
 func (al *Analyser) ReadDecoyList() {
 	println("Pulling decoy-lists from github ...")
-	err, stdout, _ := ShelloutParentDir("git clone git@github.com:refraction-networking/decoy-lists.git")
-	err, stdout, _ = Shellout("ls")
+	err, stdout, _ := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
+	os.Chdir("./decoy-lists")
+	err, stdout, _ = execShell("ls")
 	files := strings.Split(stdout, "\n")
 	sampleName := "-decoys.txt"
 	fileNameOfLatestDecoyList := ""
@@ -196,8 +191,6 @@ func (al *Analyser) ReadDecoyList() {
 	}
 
 	fmt.Printf("Reading %v ...\n", fileNameOfLatestDecoyList)
-	err, stdout, _ = Shellout("ls")
-	_ = os.Chdir("decoy-lists")
 	f, err := os.Open(fileNameOfLatestDecoyList)
 	defer f.Close()
 	if err != nil {
@@ -219,9 +212,9 @@ func (al *Analyser) ReadDecoyList() {
 		}
 	}
 	al.completeDecoyList = al.completeDecoyList[:len(al.completeDecoyList)-1]
-	_ = os.Chdir("..")
+	_ = os.Chdir(al.mainDir)
 	println("Cleaning up decoy-lists ...")
-	err, stdout, _ = ShelloutParentDir("rm -rf decoy-lists")
+	err, stdout, _ = execShell("rm -rf decoy-lists")
 }
 
 func (al *Analyser)ComputeFailureRateForCountry(terminationChannel chan bool) {
@@ -296,10 +289,12 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	 */
 
 	const amnesty = 0.05
+	os.Chdir(al.mainDir)
+	os.Chdir("list")
 
 	for countryCode, countryInfo := range al.countryStats {
 		coolDownStats := make(map[string]CoolDown)
-		benchedFile, err := os.Open("./list/" + countryCode + "_Benched.csv")
+		benchedFile, err := os.Open("./" + countryCode + "_Benched.csv")
 		if err == nil { // There exist benched decoys for this country
 			scanner := bufio.NewScanner(benchedFile)
 			for scanner.Scan() {
@@ -321,6 +316,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 				}
 			}
 			benchedFile.Close()
+			_, _, _ = execShell("rm -f" + countryCode + "_Benched.csv")
 		}
 
 
@@ -342,9 +338,8 @@ func (al *Analyser) UpdateActiveDecoyList() {
 		}
 
 		//write benching info to file
-		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Benched.csv")
 		if len(coolDownStats) != 0 {
-			benchedFile, err = os.Create("./list/" + countryCode + "_Benched.csv")
+			benchedFile, err = os.Create(countryCode + "_Benched.csv")
 			if err != nil {
 				println(err.Error())
 			}
@@ -357,7 +352,7 @@ func (al *Analyser) UpdateActiveDecoyList() {
 		}
 
 		//write active decoys to file
-		_, _, _ = ShelloutParentDir("rm ./list/" + countryCode + "_Active.txt")
+		_, _, _ = execShell("rm -f" + countryCode + "_Active.txt")
 		if len(coolDownStats) != 0 {
 			activeFile, _ := os.Create("./list/" + countryCode + "_Active.txt")
 			activeWriter := bufio.NewWriter(activeFile)
@@ -375,10 +370,10 @@ func (al *Analyser) UpdateActiveDecoyList() {
 			fmt.Printf("%v decoys benched(%v of all available decoys) for %v\n", len(coolDownStats), float64(len(coolDownStats))/float64(len(al.ipToHostname)), countryCode)
 		}
 	}
-	_ = os.Chdir("./runanalyser/protowrapper")
-	_,_,_ = ShelloutParentDir("sh run.sh")
-	_ = os.Chdir("..")
-	_ = os.Chdir("..")
+	_ = os.Chdir(al.mainDir)
+	_ = os.Chdir("protowrapper")
+	_,_,_ = execShell("sh run.sh")
+	os.Chdir(al.mainDir)
 }
 
 
