@@ -90,7 +90,7 @@ func execShell(command string) (error, string, string) {
 func directoryChanged() {
 	err, stdout, stderr := execShell("pwd")
 	if err == nil && stderr == "" {
-		fmt.Printf("Directory has been changed to %v", stdout)
+		fmt.Printf("	@@@Directory has been changed to %v", stdout)
 	}
 }
 
