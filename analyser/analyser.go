@@ -85,7 +85,7 @@ func cd(dir string) {
 func (al *Analyser) ReadDecoyList() {
 	cd(al.mainDir)
 	println("Pulling decoy-lists from github ...")
-	err, stdout, stderr := execShell("git clone git@github.com:refraction-networking/decoy-lists.git")
+	err, stdout, stderr := execShell("git clone yuxluo@github.com:refraction-networking/decoy-lists.git")
 	if err == nil && stderr == "" {
 		cd("decoy-lists")
 		cd("./decoy-lists")
