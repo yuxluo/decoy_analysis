@@ -78,7 +78,7 @@ func directoryChanged() {
 }
 
 func cd(dir string) {
-	cd(dir)
+	os.Chdir(dir)
 	directoryChanged()
 }
 
