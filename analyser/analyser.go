@@ -152,13 +152,12 @@ func (al *Analyser) ReadDecoyList() {
 	}
 }
 
-func (al *Analyser) FetchLog() {
+func (al *Analyser) FetchLog(date string) {
 	if al.FatalError == true {
 		return
 	}
 	al.cd(al.mainDir)
-	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	targetFileName := "tapdance-" + yesterdayDate + ".log.gz"
+	targetFileName := "tapdance-" + date + ".log.gz"
 	SCPCommand := "sshpass scp -r yxluo@128.138.97.190:/var/log/logstash/refraction/tapdance/"
 	SCPCommand += targetFileName
 	SCPCommand += " "
@@ -172,13 +171,12 @@ func (al *Analyser) FetchLog() {
 	}
 }
 
-func (al *Analyser) ReadLog() {
+func (al *Analyser) ReadLog(date string) {
 	if al.FatalError == true {
 		return
 	}
 	al.cd(al.mainDir)
-	yesterdayDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	targetFileName := "tapdance-" + yesterdayDate + ".log"
+	targetFileName := "tapdance-" + date + ".log"
 	fmt.Printf("Parsing %v ...\n", targetFileName)
 
 	file, err := os.Open(targetFileName)
@@ -463,7 +461,15 @@ func (al *Analyser) UpdateActiveDecoyList() {
 	al.cd(al.mainDir)
 }
 
-
+func (al* Analyser) PrintFailureRate(date string) {
+	var cumulativeSuccesses int
+	var cumulativeFailures int
+	for _, statsForEachDecoy := range al.decoyStats {
+		cumulativeFailures += statsForEachDecoy.numFailures
+		cumulativeSuccesses += statsForEachDecoy.numSuccesses
+	}
+	fmt.Printf("### %v, FailureRate: %v, NewFlows: %v \n", date, float64(cumulativeFailures)/float64(cumulativeFailures + cumulativeSuccesses), cumulativeSuccesses)
+}
 
 
 

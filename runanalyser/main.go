@@ -21,7 +21,7 @@ func runningRoutine() {
 	for {
 		<-jobTicker.timer.C
 		fmt.Println(time.Now(), "- just ticked")
-		RunAnalysis()
+		RunAnalysis("a")
 		jobTicker.updateTimer()
 	}
 }
@@ -42,19 +42,18 @@ func (t *jobTicker) updateTimer() {
 }
 
 func main() {
-	RunAnalysis()
-	RunAnalysis()
-	//for true {
-	//	runningRoutine()
-	//}
+	for i := -1; i >= -7; i-- {
+		date := time.Now().AddDate(0, 0, i).Format("2006-01-02")
+		RunAnalysis(date)
+	}
 }
 
-func RunAnalysis() {
+func RunAnalysis(date string) {
 	var al *analyser.Analyser
 	al = analyser.InitAnalyser()
 	al.ReadDecoyList()
-	al.FetchLog()
-	al.ReadLog()
+	al.FetchLog(date)
+	al.ReadLog(date)
 
 	terminationChannel1 := make(chan bool)
 	terminationChannel2 := make(chan bool)
@@ -70,10 +69,5 @@ func RunAnalysis() {
 	for _ = range terminationChannel3 {}
 	for _ = range terminationChannel4 {}
 
-	al.CalculateAverageFailureRateForEachCountry()
-	al.UpdateActiveDecoyList()
-	if al.FatalError {
-		time.Sleep(10 * time.Minute)
-		go RunAnalysis() // try again in 10 minutes if encounter error
-	}
+	al.PrintFailureRate(date)
 }
